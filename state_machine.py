@@ -24,7 +24,7 @@ import ntptime
 from delay_ms import Delay_ms
 import ulogger
 
-from config import SCENARIOS, PINS
+from config import SCENARIOS, PINS, SETTINGS
 
 class Clock(ulogger.BaseClock):
     def __init__(self):
@@ -58,18 +58,14 @@ handlers = (
 _LOGGER = ulogger.Logger(__name__, handlers)
 
 #Read in the car percentage densities from different directions from Rpi which processes signals from sensors
-# it will find the total density and the percentage that belongs to each direction
+# it will find the total wait_times and the percentage that belongs to each direction
 # in the case of more than 1 item in a scenario, it returns the max with its name as key
 # all these will be later handled by the Rpi. The pi will return only the max time of the Green times
-async def read_density():
-    density = OrderedDict([('North', 40), ('Southx', 35), ('West', 25), ('East', 0)])
+async def get_wait_time():
+    #finds the area under the curve (real-time) and the worst case response time (and road throughput) to compute the allocated time
+    wait_times = OrderedDict([('North', 40), ('Southx', 35), ('West', 25), ('East', 0)]) #example of what is returned
     await asyncio.sleep(0)
-    return density
-
-#get the updated cycle time from the Rpi
-async def get_cycle_time():
-    cycle_time = 40
-    return cycle_time
+    return wait_times
 
 class Condition(object):
     """ A helper class to call condition checks in the intended way.
@@ -144,9 +140,9 @@ class Transition(object):
             prepare (optional[str, callable or list]): callbacks to trigger before conditions are checked
         """
         self.model = model
-        #self.source = self.model.state.name if self.model.state else None
+                     
         self.dest = None
-
+                     
         self.idx = 0 if self.model.loop_includes_initial else 1
 
         self.prepare = [self._check_source_dest]
@@ -176,7 +172,6 @@ class Transition(object):
         Returns: boolean indicating whether the transition was
             successfully executed (True if successful, False if not).
         """
-        #self.source = self.model.state.name if self.model.state else None
 
         if self.model.ordered_transition:
             self._ordered_transitions()
@@ -201,9 +196,6 @@ class Transition(object):
 
     def _change_state(self, machine):
         machine.go_to_state(self.model, self.dest)
-
-    def _change_linked_state(self, machine):
-        pass
 
     def _check_source_dest(self):
         if self.model.state.name == self.dest:
@@ -282,9 +274,7 @@ class StateMachine(object):
 
     name = 'Traffic Control System'
 
-    traffic_cycle_time = 40 #overall time in seconds for a single cycle for all the junctions
-
-    get_ready_time = 5
+    get_ready_time = SETTINGS['get_ready_time']
 
     shared_times = []
 
@@ -421,9 +411,7 @@ class StateMachine(object):
         model.state.enter(self, model)
 
     async def update(self):
-        #print('updating...')
-        #print(self.delay.running())
-        self.density = await read_density()
+        self.wait_times = await get_wait_time() 
         await asyncio.sleep_ms(1)
         for state_name in self.g_current_states: #make sure this section and the associated state updates don't tie down
             #_LOGGER.info(f'Updating {state_name}')
@@ -432,13 +420,8 @@ class StateMachine(object):
             await asyncio.sleep_ms(1)
         self.g_current_states = []
 
-    @classmethod
-    def _change_traffic_cycle_time(cls):
-        # find the green section of the road and use the associated time from read_density()
-        cls.traffic_cycle_time = get_cycle_time()
-
     def PowerSaverMode(self):# enter the mode when the densities on all the paths are zero
-        '''Kills all the lamps and go to sleep. It wakes up when the density has passed a threshold'''
+        '''Kills all the lamps and go to sleep. It wakes up when the flow rate has passed a threshold'''
         pass
 
     def callbacks(self, funcs):
@@ -528,7 +511,7 @@ class Green(State):
         State.enter(self, machine, model)
 
         try:
-            machine.state_allotted_time = int((machine.density[model.name]/100) * machine.traffic_cycle_time * 1000)
+            machine.state_allotted_time = int((machine.wait_times[model.name]*1000)) 
         except KeyError:
             pass
 
