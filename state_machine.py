@@ -434,6 +434,7 @@ class StateMachine(object):
 
     @classmethod
     def _change_traffic_cycle_time(cls):
+        # find the green section of the road and use the associated time from read_density()
         cls.traffic_cycle_time = get_cycle_time()
 
     def PowerSaverMode(self):# enter the mode when the densities on all the paths are zero
