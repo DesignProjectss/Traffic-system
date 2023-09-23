@@ -7,7 +7,7 @@ SCENARIOS = OrderedDict([
                         {
                             'name': 'North',
                             'bulbs': 3,
-                            'states': ['Red', 'Green', 'Yellow_Green', 'Yellow_Red'],
+                            'states': ['Red', 'Yellow_Red', 'Green', 'Yellow_Green'],
                             'initial': 'Green',
                             'ordered_transition': True,
                             'status': 'On'
@@ -16,7 +16,7 @@ SCENARIOS = OrderedDict([
                         {
                             'name': 'South',
                             'bulbs': 3,
-                            'states': ['Red', 'Green', 'Yellow_Green', 'Yellow_Red'],
+                            'states': ['Red', 'Yellow_Red', 'Green', 'Yellow_Green'],
                             'initial': 'Green',
                             'ordered_transition': True,
                             'status': 'On'
@@ -45,7 +45,7 @@ SCENARIOS = OrderedDict([
                     {
                         'name': 'West',
                         'bulbs': 3,
-                        'states': ['Red', 'Green', 'Yellow_Green', 'Yellow_Red'],
+                        'states': ['Red', 'Yellow_Red', 'Green', 'Yellow_Green'],
                         'initial': 'Red',
                         'ordered_transition': True,
                         'status': 'On'
@@ -60,7 +60,7 @@ SCENARIOS = OrderedDict([
                     {
                         'name': 'East',
                         'bulbs': 3,
-                        'states': ['Red', 'Green', 'Yellow_Green', 'Yellow_Red'],
+                        'states': ['Red', 'Yellow_Red', 'Green', 'Yellow_Green'],
                         'initial': 'Red',
                         'ordered_transition': True,
                         'status': 'Off'
