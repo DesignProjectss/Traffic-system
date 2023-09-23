@@ -1,5 +1,10 @@
 from collections import OrderedDict
 
+SETTINGS = {
+            'get_ready_time': 5
+
+}
+
 SCENARIOS = OrderedDict([
             (
                 1,
