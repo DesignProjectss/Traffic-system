@@ -14,7 +14,8 @@ SCENARIOS = OrderedDict([
                             'bulbs': 3,
                             'states': ['Red', 'Yellow_Red', 'Green', 'Yellow_Green'],
                             'initial': 'Green',
-                            'status': 'On'
+                            'status': 'On',
+                            'throughput': 1
                         },
 
                         {
@@ -22,7 +23,8 @@ SCENARIOS = OrderedDict([
                             'bulbs': 3,
                             'states': ['Red', 'Yellow_Red', 'Green', 'Yellow_Green'],
                             'initial': 'Green',
-                            'status': 'On'
+                            'status': 'On',
+                            'throughput': 1
                         }
                     ]
             ),
@@ -35,7 +37,8 @@ SCENARIOS = OrderedDict([
                         'bulbs': 2,
                         'states': ['Red', 'Green'],
                         'initial': 'Red',
-                        'status': 'On'
+                        'status': 'On',
+                        'throughput': 1
                     }
 
 
@@ -49,7 +52,8 @@ SCENARIOS = OrderedDict([
                         'bulbs': 3,
                         'states': ['Red', 'Yellow_Red', 'Green', 'Yellow_Green'],
                         'initial': 'Red',
-                        'status': 'On'
+                        'status': 'On',
+                        'throughput': 1
                     }
 
 
@@ -63,7 +67,8 @@ SCENARIOS = OrderedDict([
                         'bulbs': 3,
                         'states': ['Red', 'Yellow_Red', 'Green', 'Yellow_Green'],
                         'initial': 'Red',
-                        'status': 'Off'
+                        'status': 'Off',
+                        'throughput': 1
                     }
 
 
