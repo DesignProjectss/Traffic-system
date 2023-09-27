@@ -1,18 +1,3 @@
-#states
-#models
-#iterations for each state per models
-#state machine
-
-#group models into scenarios: admin
-#(future: validate scenarios before updating the system)
-#(future: develop an algorithm to decide on which scenario to use at a particular instance out of the competing ones based on sensor values)
-#(future: develop a simulation based algorithm to group models into scenarios based on time, collisions avoidance and constraints)
-##initial percentage of time slice based on road business: admin
-##(future: develop time share algorithm based on sensor values)
-##global cycle time: admin
-##(future: algorithm to decide global cycle time to ensure free flow of traffic while punishing time delay
-
-#from micropython import const
 
 from machine import Pin
 import sys
@@ -56,16 +41,6 @@ handlers = (
 )
 
 _LOGGER = ulogger.Logger(__name__, handlers)
-
-#Read in the car percentage densities from different directions from Rpi which processes signals from sensors
-# it will find the total wait_times and the percentage that belongs to each direction
-# in the case of more than 1 item in a scenario, it returns the max with its name as key
-# all these will be later handled by the Rpi. The pi will return only the max time of the Green times
-async def get_wait_time():
-    #finds the area under the curve (real-time) and the worst case response time (and road throughput) to compute the allocated time
-    wait_times = OrderedDict([('North', 40), ('Southx', 35), ('West', 25), ('East', 0)]) #example of what is returned
-    await asyncio.sleep(0)
-    return wait_times
 
 class Condition(object):
     """ A helper class to call condition checks in the intended way.
@@ -143,25 +118,38 @@ class Transition(object):
                      
         self.dest = None
                      
-        self.idx = 0 if self.model.loop_includes_initial else 1
-
         self.prepare = [self._check_source_dest]
         self.before = [self._check_allowed_states]
-        self.after = []
+        self.after = [self._remove_priority]
+        
+        self.add_callback('prepare', prepare)
+        self.add_callback('before', before)
+        self.add_callback('after', after)
 
-        self.conditions = []
+        self.conditions = [self._check_model_priority]
+        
         if conditions is not None:
-            for cond in listify(conditions):
+            for cond in conditions:
                 self.conditions.append(self.condition_cls(cond))
         if unless is not None:
-            for cond in listify(unless):
+            for cond in unless:
                 self.conditions.append(self.condition_cls(cond, target=False))
+
+    # def _eval_conditions(self, machine): #evaluates to false only when all conditions fail.
+    # 	result = []
+
+    #     for cond in self.conditions:
+    #         if cond.check(machine):
+    #         	result.append(True)
+    #         else:
+    #         	result.append(False)
+             	
+    #     return any(result)
 
     def _eval_conditions(self, machine):
         for cond in self.conditions:
             if not cond.check(machine):
-                _LOGGER.debug("%s Transition condition failed: %s() does not return %s. Transition halted.",
-                              machine.name, cond.func, cond.target)
+                #_LOGGER.debug("%s Transition condition failed: %s() does not return %s. Transition halted.",machine.name, cond.func, cond.target)
                 return False
         return True
 
@@ -197,14 +185,6 @@ class Transition(object):
     def _change_state(self, machine):
         machine.go_to_state(self.model, self.dest)
 
-    def _check_source_dest(self):
-        if self.model.state.name == self.dest:
-            self.dest = None
-
-    def _check_allowed_states(self):
-        if not self.dest in self.model.states.keys():
-            self.dest = None
-
     def _ordered_transitions(self):
         """ Add a set of transitions that move linearly from state to state.
         Args:
@@ -221,7 +201,7 @@ class Transition(object):
                 initial state included.
         """
         states = self.model.ordered_states
-        loop = self.model.loop
+        current_state_name = self.model.state.name
 
         len_transitions = len(states)
         if len_transitions < 2:
@@ -229,12 +209,27 @@ class Transition(object):
                              "with fewer than 2 states.")
 
         try:
-            self.dest = states[self.idx]
-            self.idx += 1
+            self.dest = states[states.index(current_state_name)+1]
         except IndexError:
-            self.idx = 0 if loop else -1 # stay in the last state or go to the first
-            self.dest = states[self.idx]
-            self.idx = 1 if self.idx == 0 else -1
+            self.dest = states[0]
+            
+    def _check_source_dest(self):
+	if self.model.state.name == self.dest:
+            self.dest = None
+
+    def _check_allowed_states(self):
+        if not self.dest in self.model.states.keys():
+            self.dest = None
+            
+    def _check_model_priority(self):
+    	return self.model.priority == 0   	
+    	
+    # def _check_right_state(self):
+    # 	return self.model.state.name == 'Green'
+    	
+    def _remove_priority(self):
+        if self.model.state.name == 'Red':
+    	    self.model.priority = None
 
     def add_callback(self, trigger, func):
         """ Add a new before, after, or prepare callback.
@@ -286,97 +281,38 @@ class StateMachine(object):
 
     gpios = PINS['GPIO_POOL']
 
-    def __init__(self):
-        self.g_current_states = []
-        self.g_states = []
+    def __init__(self):        
         self.models = OrderedDict()
 
         self.delay.callback(self._run_transitions, ())
 
-        self.state_allotted_time = 0 # there is only one per transition
+        self.check_event_time = 0
 
         self._initialize_machine()
 
     def _initialize_machine(self):
-        self._generate_global_states_from_scenarios()
         self._add_models()
-        self._add_g_states_to_models()
-        self._modify_model_ordered_state()
         self._create_transition(self)
-        self.delay.trigger()
 
-    def _generate_global_states_from_scenarios(self):
-        g_state_1 = []#['Green', 'Red', 'Red', 'Red']
-        g_state_2 = []#['Yellow', 'Yellow', 'Red', 'Red']
-        g_id = None
-        for value in SCENARIOS.values():
-            if isinstance(value, list):
-                if value[0]['status'] == 'On':
-                    g_state_1.append(value[0]['initial'])
-            else:
-                if value['status'] == 'On':
-                    g_state_1.append(value['initial'])
-
-        for value in g_state_1:
-            if value == 'Green':
-                g_state_2.append('Yellow_Green')
-                g_id = 1
-            elif value == 'Red' and g_id:
-                g_state_2.append('Yellow_Red')
-                g_id = 0
-            else:
-                g_state_2.append('Red')
-
-        for i in range([value[0]['status']if isinstance(value, list) else value['status']for value in SCENARIOS.values()].count('On'),0,-1):
-            self.g_states.append(g_state_1[i:]+g_state_1[:i])
-            self.g_states.append(g_state_2[i:]+g_state_2[:i])
-
-    #todo: link a model to another here.
-    def _add_models(self): #(self, lamp_location, number_of_bulbs=3, states=[], initial=None, loop=True, ordered_transition=True):
+    def _add_models(self): #(self, lamp_location, number_of_bulbs=3, states=[], initial=None):
         for value in SCENARIOS.values():
             if isinstance(value, list):
                 for val in value:
                     if val['status'] == 'On':
                         name = val['name']
-                        #if not name.startswith('*'):
-                        self.models[name] = Lamps(val['name'], val['states'], 'Dummy', val['bulbs'])
-                        _LOGGER.info(f"Created model: {val['name']} with GPIO {self.models[name].gpios}")
-                        #else:
-                            #_LOGGER.info(f"Model: {val['name']} already created")
+                        self.models[name] = Lamps(val['name'], val['states'], val['initial'], val['bulbs'])
+                        _LOGGER.info(f"Created model: {val['name']} with GPIO {self.models[name].gpios}")                       
                     else:
                         _LOGGER.info(f"Model: {val['name']} is off!")
             else:
                 if value['status'] == 'On':
                         name = value['name']
-                        self.models[name] = Lamps(value['name'], value['states'], 'Dummy', value['bulbs'])
+                        self.models[name] = Lamps(value['name'], value['states'], val['initial'], value['bulbs'])
                         _LOGGER.info(f"Created model: {value['name']} with GPIO {self.models[name].gpios}")
                 else:
                     _LOGGER.info(f"Model: {value['name']} is off!")
 
-    def _add_g_states_to_models(self):
-        for states in self.g_states:
-            #for k, model in enumerate(self.models.values()):
-            for k, value in enumerate(SCENARIOS.values()):
-                if isinstance(value, list):
-                    for val in value:
-                        self.models[val['name']].ordered_states.append(states[k]) if val['status']=='On' else None
-                else:
-                    self.models[value['name']].ordered_states.append(states[k]) if value['status']=='On' else None
-
-    def _modify_model_ordered_state(self):
-        for k, value in enumerate(SCENARIOS.values()):
-            if isinstance(value, list):
-                    for val in value:
-                        if val['name'].endswith('x'):
-                            g_index = self.models[val['name']].ordered_states.index('Green')
-                            self.models[val['name'].rstrip('x')].ordered_states[g_index] = 'Green'
-                            self.models[val['name'].rstrip('x')].ordered_states[g_index+1] = 'Yellow_Green'
-            else:
-                if value['name'].endswith('x'):
-                    g_index = self.models[value['name']].ordered_states.index('Green')
-                    self.models[value['name'].rstrip('x')].ordered_states[g_index] = 'Green'
-                    self.models[value['name'].rstrip('x')].ordered_states[g_index+1] = 'Yellow_Green'
-
+   
     @staticmethod
     def _add_states(model, states):# this method can only be called in the lamp models
         for state_name in states:
@@ -397,33 +333,28 @@ class StateMachine(object):
     def _run_transitions(self):
         for transition in self.transitions:
             transition.execute(self)
-        self.delay.trigger(self.state_allotted_time)
-        _LOGGER.info(f"There will be transition in: {self.state_allotted_time}ms")
 
     def go_to_state(self, model, state_name):
-        self.g_current_states.append(state_name)# it can be any length due to the possibility of internal transitions
         if model.state:
             _LOGGER.debug('Exiting {}'.format(model.state.name))
             model.state.exit(self, model)
-        model.state = model.states[state_name] #if state_name != 'Dummy' else Dummy()
+        model.state = model.states[state_name]
         _LOGGER.debug('Entering {}'.format(model.state.name))
-        #self.delay.trigger(self.state_allotted_time)
         model.state.enter(self, model)
 
     async def update(self):
-        self.wait_times = await get_wait_time() 
-        await asyncio.sleep_ms(1)
-        for state_name in self.g_current_states: #make sure this section and the associated state updates don't tie down
-            #_LOGGER.info(f'Updating {state_name}')
-            state = getattr(sys.modules[__name__], state_name)()
-            state.update(self)
-            await asyncio.sleep_ms(1)
-        self.g_current_states = []
+        #await asyncio.sleep_ms(self.check_event_time) #delay asking for new priority for at least previous wait time
+        #pubsub comm protocol to get the direction with the highest priority and the minimum time before checking back for an event (self.check_event_time)(make it async)
+        #set self.check_event_time
+        for model in self.models:
+            #model.priority = 0 if model.name ==  self.priority_model else None
+            await asyncio.sleep_ms(0)
+        #self._run_transitions() #event triggered transition
 
-    def PowerSaverMode(self):# enter the mode when the densities on all the paths are zero
+    def powerSaverMode(self):# enter the mode when the densities on all the paths are zero
         '''Kills all the lamps and go to sleep. It wakes up when the flow rate has passed a threshold'''
         pass
-
+        
     def callbacks(self, funcs):
         """ Triggers a list of callbacks """
         for func in funcs:
@@ -448,27 +379,19 @@ class StateMachine(object):
         func()
 
 
-    @staticmethod
+     @staticmethod
     def resolve_callable(func):
         """ Converts a model's property name, method name or a path to a callable into a callable.
             If func is not a string it will be returned unaltered.
         Args:
             func (str or callable): Property name, method name or a path to a callable
-            event_data (EventData): Currently processed event
         Returns:
             callable function resolved from string or func
         """
         if isinstance(func, str):
-            try:
-                func = getattr(event_data.model, func)
-                if not callable(func):  # if a property or some other not callable attribute was passed
-                    def func_wrapper(*_, **__):  # properties cannot process parameters
-                        return func
-                    return func_wrapper
-            except AttributeError:
                 try:
                     module_name, func_name = func.rsplit('.', 1)
-                    module = __import__(module_name)
+                    module = __import__(module_name.split('.')[0])
                     for submodule_name in module_name.split('.')[1:]:
                         module = getattr(module, submodule_name)
                     func = getattr(module, func_name)
@@ -509,12 +432,6 @@ class Green(State):
 
     def enter(self, machine, model):
         State.enter(self, machine, model)
-
-        try:
-            machine.state_allotted_time = int((machine.wait_times[model.name]*1000)) 
-        except KeyError:
-            pass
-
         for state_name in self.name.split('_'):
             model.putOnLamp(state_name)
 
@@ -538,7 +455,7 @@ class Yellow_Green(State):
     def enter(self, machine, model):
         State.enter(self, machine, model)
 
-        machine.state_allotted_time = machine.get_ready_time*1000 # call this from the Rpi
+        machine.delay.trigger(machine.get_ready_time*1000)
 
         for state_name in self.name.split('_'):
             model.putOnLamp(state_name)
@@ -563,7 +480,7 @@ class Yellow_Red(State):
     def enter(self, machine, model):
         State.enter(self, machine, model)
 
-        machine.state_allotted_time = machine.get_ready_time*1000 # call this from the Rpi
+        machine.delay.trigger(machine.get_ready_time*1000)
 
         for state_name in self.name.split('_'):
             model.putOnLamp(state_name)
@@ -576,37 +493,19 @@ class Yellow_Red(State):
     def update(self, machine):
         pass
 
-class Dummy(State):
-    def __init__(self):
-        super().__init__()
-
-    @property
-    def name(self):
-        return 'Dummy'
-
-    def enter(self, machine, model):
-        State.enter(self, machine, model)
-
-        machine.state_allotted_time = machine.get_ready_time*1000 # call this from the Rpi
-
-    def update(self, machine):
-        pass
-
 
 class Lamps():
 
-    def __init__(self, lamp_location, states, init_state='Dummy', number_of_bulbs=3, loop=True,\
-                ordered_transition=True, loop_includes_initial=True):
+    def __init__(self, lamp_location, states, init_state='Dummy', number_of_bulbs=3):
+                
+        self.priority = None
+        
         self.lamp_location = lamp_location
         self.name = lamp_location
         self.number_of_bulbs = number_of_bulbs
 
-        self.ordered_states = []
-        self.loop = loop
-        self.loop_includes_initial = loop_includes_initial
-
-        self.ordered_transition = ordered_transition #if ordered_transition is set on the machine it overrides the model's
-
+        self.ordered_states = states
+        
         self.gpios = {}
         StateMachine._add_pins(self, states, number_of_bulbs)
 

@@ -1,5 +1,10 @@
 from collections import OrderedDict
 
+SETTINGS = {
+            'get_ready_time': 5
+
+}
+
 SCENARIOS = OrderedDict([
             (
                 1,
@@ -7,19 +12,19 @@ SCENARIOS = OrderedDict([
                         {
                             'name': 'North',
                             'bulbs': 3,
-                            'states': ['Red', 'Green', 'Yellow_Green', 'Yellow_Red'],
+                            'states': ['Red', 'Yellow_Red', 'Green', 'Yellow_Green'],
                             'initial': 'Green',
-                            'ordered_transition': True,
-                            'status': 'On'
+                            'status': 'On',
+                            'throughput': 1
                         },
 
                         {
                             'name': 'South',
                             'bulbs': 3,
-                            'states': ['Red', 'Green', 'Yellow_Green', 'Yellow_Red'],
+                            'states': ['Red', 'Yellow_Red', 'Green', 'Yellow_Green'],
                             'initial': 'Green',
-                            'ordered_transition': True,
-                            'status': 'On'
+                            'status': 'On',
+                            'throughput': 1
                         }
                     ]
             ),
@@ -32,8 +37,8 @@ SCENARIOS = OrderedDict([
                         'bulbs': 2,
                         'states': ['Red', 'Green'],
                         'initial': 'Red',
-                        'ordered_transition': True,
-                        'status': 'On'
+                        'status': 'On',
+                        'throughput': 1
                     }
 
 
@@ -45,10 +50,10 @@ SCENARIOS = OrderedDict([
                     {
                         'name': 'West',
                         'bulbs': 3,
-                        'states': ['Red', 'Green', 'Yellow_Green', 'Yellow_Red'],
+                        'states': ['Red', 'Yellow_Red', 'Green', 'Yellow_Green'],
                         'initial': 'Red',
-                        'ordered_transition': True,
-                        'status': 'On'
+                        'status': 'On',
+                        'throughput': 1
                     }
 
 
@@ -60,10 +65,10 @@ SCENARIOS = OrderedDict([
                     {
                         'name': 'East',
                         'bulbs': 3,
-                        'states': ['Red', 'Green', 'Yellow_Green', 'Yellow_Red'],
+                        'states': ['Red', 'Yellow_Red', 'Green', 'Yellow_Green'],
                         'initial': 'Red',
-                        'ordered_transition': True,
-                        'status': 'Off'
+                        'status': 'Off',
+                        'throughput': 1
                     }
 
 
