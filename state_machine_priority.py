@@ -228,7 +228,7 @@ class Transition(object):
     # 	return self.model.state.name == 'Green'
     	
     def _remove_priority(self):
-        if self.model.state.name == 'Yellow_Green':
+        if self.model.state.name == 'Red':
     	    self.model.priority = None
 
     def add_callback(self, trigger, func):
